@@ -43,6 +43,23 @@ do
     cat ${KRN_CONF_SNIPPET} >> ${KERNEL_CONFIG}
 done
 
+# User-defined configs
+make LLVM=1 rustavailable
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SOUND
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SND
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SND_USB
+scripts/config --file $KERNEL_CONFIG --module CONFIG_SND_USB_AUDIO
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SAMPLES
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SAMPLES_RUST
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SAMPLES_RUST_MINIMAL
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_SAMPLES_RUST_HOSTPROGS
+scripts/config --file $KERNEL_CONFIG --module CONFIG_BT
+scripts/config --file $KERNEL_CONFIG --module CONFIG_BT_HCIBTUSB
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_BT_HCIBTUSB_RTL
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_BT_HCIBTUSB_BCM
+scripts/config --file $KERNEL_CONFIG --disable CONFIG_MODVERSIONS
+scripts/config --file $KERNEL_CONFIG --enable CONFIG_RUST
+
 # VyOS requires some small Kernel Patches - apply them here
 # It's easier to have them here and make use of the upstream
 # repository instead of maintaining a full Kernel Fork.
