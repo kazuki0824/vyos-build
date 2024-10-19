@@ -2,8 +2,7 @@
 set -eu -o pipefail
 
 
-sudo rm -rf ./build/
-sudo rm -rf ./packages/*.deb
+sudo git clean -xdf
 
 wget -P ./packages/ https://github.com/tsukumijima/px4_drv/releases/download/v0.4.5/px4-drv-dkms_0.4.5_all.deb
 
@@ -38,14 +37,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-t
 source '/home/vyos_bld/.cargo/env'
 cargo install bindgen-cli --version 0.68.1 --locked
 
-cd scripts/package-build/linux-kernel/
-./build-kernel.sh
-./build-intel-qat.sh
-sudo apt install rdfind -y
-#./build-jool.py
-./build-linux-firmware.sh
+cd scripts/package-build/
+./build.py --config package.toml --packages linux-kernel accel-ppp qat nat-rtsp
 
-cd ../../../
+cd ../../
 sudo ./build-vyos-image generic --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
 EOF
 
