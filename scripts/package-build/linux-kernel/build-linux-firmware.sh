@@ -91,11 +91,11 @@ done
 FILE="intel/ibt-19-0-4.sfi"
 TARGET="$(echo "${FILE}" | sed "s/${LINUX_FIRMWARE_BUILD_DIR}\///g")"
 TARGET_DIR="${VYOS_FIRMWARE_DIR}/lib/firmware/$(dirname "${TARGET}")"
-cp -P "${CWD}/${LINUX_FIRMWARE_BUILD_DIR}/${TARGET}" "${TARGET_DIR}" -v
+cp -L "${CWD}/${LINUX_FIRMWARE_BUILD_DIR}/${TARGET}" "${TARGET_DIR}" -v
 FILE="intel/ibt-19-0-4.ddc"
 TARGET="$(echo "${FILE}" | sed "s/${LINUX_FIRMWARE_BUILD_DIR}\///g")"
 TARGET_DIR="${VYOS_FIRMWARE_DIR}/lib/firmware/$(dirname "${TARGET}")"
-cp -P "${CWD}/${LINUX_FIRMWARE_BUILD_DIR}/${TARGET}" "${TARGET_DIR}" -v
+cp -L "${CWD}/${LINUX_FIRMWARE_BUILD_DIR}/${TARGET}" "${TARGET_DIR}" -v
 
 
 echo "I: Create linux-firmware package"
