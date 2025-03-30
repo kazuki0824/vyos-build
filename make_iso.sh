@@ -7,8 +7,8 @@ sudo git clean -xdf
 wget -P ./packages/ https://github.com/tsukumijima/px4_drv/releases/download/v0.4.5/px4-drv-dkms_0.4.5_all.deb
 
 cd scripts/package-build/linux-kernel/
-REF="v6.6.56"
-FIRMWARE_REF="20240610"
+REF="v6.6.79"
+FIRMWARE_REF="20250311"
 if [ ! -d linux ]; then
   git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git --no-single-branch --depth 1 -b $REF
 else
