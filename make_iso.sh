@@ -14,6 +14,7 @@ if [ ! -d linux ]; then
 else
   cd linux
   git fetch -vv
+  git reset --hard HEAD
   git switch $REF --detach
   cd ..
 fi
@@ -21,6 +22,7 @@ if [ ! -d linux-firmware ]; then
   git clone git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git --single-branch
 else
   cd linux-firmware
+  git reset --hard HEAD
   git switch main
   git pull -vv
   git switch $FIRMWARE_REF --detach
