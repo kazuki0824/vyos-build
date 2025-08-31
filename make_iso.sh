@@ -30,13 +30,13 @@ else
 fi
 cd ../../../
 
-
+sudo docker pull vyos/vyos-build:current
 sudo docker run --privileged --rm -i -v $(pwd):/vyos -w /vyos vyos/vyos-build:current bash << EOF
 set -eu -o pipefail
 sudo mount -i -o remount,exec,dev /vyos
 
 sudo apt update
-sudo apt install llvm-dev libclang-dev clang -y
+sudo apt install llvm-dev libclang-dev clang flex bison bc kmod libssl-dev libelf-dev python3-dev libtraceevent-dev -y
 
 # note: https://lore.kernel.org/lkml/20240401212303.537355-4-ojeda@kernel.org/
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly-2023-08-01 --component rust-src -y
