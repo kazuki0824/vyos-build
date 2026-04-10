@@ -1,0 +1,155 @@
+image_format = "iso"
+
+[additional_repositories.backports]
+url = "http://deb.debian.org/debian"
+distribution = "bookworm-backports"
+components = "main"
+no_source = true
+
+packages = [
+  "qemu-system-x86/bookworm-backports",
+  "qemu-system-gui/bookworm-backports",
+  "libvirt-daemon-system/bookworm-backports",
+  "libvirt-clients/bookworm-backports",
+  "pciutils",
+]
+
+[[includes_chroot]]
+path = "usr/share/vyos/android-tv-host-kernel-cmdline"
+data = """
+intel_iommu=on iommu=pt vfio-pci.ids=8086:4e71 video=efifb:off video=vesafb:off
+"""
+
+[[includes_chroot]]
+path = "etc/asound.conf"
+data = """
+pcm.ur22_dmix {
+    type dmix
+    ipc_key 224422
+    slave {
+        pcm "front:CARD=UR22mkII,DEV=0"
+        rate 48000
+        channels 2
+        period_time 100000
+        periods 5
+    }
+}
+
+pcm.ur22mix {
+    type plug
+    slave.pcm "ur22_dmix"
+}
+
+pcm.!default {
+    type plug
+    slave.pcm "ur22mix"
+}
+
+ctl.!default {
+    type hw
+    card UR22mkII
+}
+"""
+
+[[includes_chroot]]
+path = "usr/local/share/android-tv/android-tv.xml"
+data = """
+<domain type='kvm'>
+  <name>android-tv</name>
+  <memory unit='MiB'>4096</memory>
+  <vcpu placement='static'>4</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-q35-8.2'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough' check='none'/>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/config/android-tv/androidtv.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <source>
+        <address domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
+      </source>
+    </hostdev>
+    <audio id='1' type='alsa'/>
+    <sound model='virtio' streams='1'>
+      <audio id='1'/>
+    </sound>
+  </devices>
+</domain>
+"""
+
+[[includes_chroot]]
+path = "etc/systemd/system/android-tv-bluealsa.service"
+data = """
+[Unit]
+Description=BlueALSA A2DP sink daemon for Android TV host audio
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/bluealsa -p a2dp-sink
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+[[includes_chroot]]
+path = "etc/systemd/system/android-tv-bluealsa-aplay.service"
+data = """
+[Unit]
+Description=Route Bluetooth audio into the default ALSA mix
+After=android-tv-bluealsa.service
+Requires=android-tv-bluealsa.service
+
+[Service]
+ExecStart=/usr/bin/bluealsa-aplay --pcm=default
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+[[includes_chroot]]
+path = "opt/vyatta/etc/config/scripts/vyos-postconfig-bootup.script"
+data = """
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+
+run systemctl enable bluetooth.service
+run systemctl enable libvirtd.service
+run systemctl enable android-tv-bluealsa.service
+run systemctl enable android-tv-bluealsa-aplay.service
+
+run systemctl start bluetooth.service
+run systemctl start libvirtd.service
+run systemctl start android-tv-bluealsa.service
+run systemctl start android-tv-bluealsa-aplay.service
+
+if ! run virsh dominfo android-tv >/dev/null 2>&1; then
+  run virsh define /usr/local/share/android-tv/android-tv.xml
+fi
+
+if ! run virsh dominfo android-tv | grep -q 'Autostart:.*enable'; then
+  run virsh autostart android-tv
+fi
+
+if ! run virsh domstate android-tv | grep -q running; then
+  run virsh start android-tv
+fi
+
+exit
+"""
+
+default_config = """
+set service ssh
+"""

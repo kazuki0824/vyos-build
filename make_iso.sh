@@ -49,6 +49,6 @@ cd scripts/package-build/linux-kernel/
 mv -v ./*.deb ../../../packages/
 cd ../../../
 
-sudo ./build-vyos-image generic --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
+sudo ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
 EOF
 
