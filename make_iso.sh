@@ -30,8 +30,30 @@ else
 fi
 cd ../../../
 
+ANDROID_TOOLS_DIR="${ANDROID_TOOLS_DIR:-$(realpath ../android_device_maleicacid_androidtv_tools)}"
+ANDROID_PRODUCT="r86s_virtio_tv"
+ANDROID_OUT_DIR="$ANDROID_TOOLS_DIR/build-work/out/target/product/$ANDROID_PRODUCT"
+BOOT_QCOW2="$ANDROID_OUT_DIR/disk-vda.qcow2"
+USERDATA_QCOW2="$ANDROID_OUT_DIR/userdata-empty.qcow2"
+ANDROID_STAGE_DIR="$(pwd)/data/live-build-config/includes.chroot/usr/local/share/android-tv"
+
+"$ANDROID_TOOLS_DIR/get_android_qcow2.sh"
+
+test -f "$BOOT_QCOW2"
+test -f "$USERDATA_QCOW2"
+
+sudo rm -rf "$ANDROID_STAGE_DIR"
+sudo mkdir -p "$ANDROID_STAGE_DIR"
+sudo cp -f "$BOOT_QCOW2" "$ANDROID_STAGE_DIR/androidtv.qcow2"
+sudo cp -f "$USERDATA_QCOW2" "$ANDROID_STAGE_DIR/userdata-empty.qcow2"
+
+DOCKER_ENV_ARGS=()
+if [ -n "${VYOS1X_REPO_URL:-}" ]; then
+  DOCKER_ENV_ARGS+=(-e "VYOS1X_REPO_URL=$VYOS1X_REPO_URL")
+fi
+
 sudo docker pull vyos/vyos-build:current
-sudo docker run --privileged --rm -i -v $(pwd):/vyos -w /vyos vyos/vyos-build:current bash << EOF
+sudo docker run --privileged --rm -i "${DOCKER_ENV_ARGS[@]}" -v $(pwd):/vyos -w /vyos vyos/vyos-build:current bash << EOF
 set -eu -o pipefail
 sudo mount -i -o remount,exec,dev /vyos
 

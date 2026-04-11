@@ -71,8 +71,14 @@ data = """
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='/config/android-tv/androidtv.qcow2'/>
+      <source file='/usr/local/share/android-tv/androidtv.qcow2'/>
       <target dev='vda' bus='virtio'/>
+      <readonly/>
+    </disk>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/config/android-tv/androidtv-userdata.qcow2'/>
+      <target dev='vdb' bus='virtio'/>
     </disk>
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <source>
@@ -124,6 +130,12 @@ path = "opt/vyatta/etc/config/scripts/vyos-postconfig-bootup.script"
 data = """
 #!/bin/vbash
 source /opt/vyatta/etc/functions/script-template
+
+run mkdir -p /config/android-tv
+
+if [ ! -f /config/android-tv/androidtv-userdata.qcow2 ]; then
+  run cp -f /usr/local/share/android-tv/userdata-empty.qcow2 /config/android-tv/androidtv-userdata.qcow2
+fi
 
 run systemctl enable bluetooth.service
 run systemctl enable libvirtd.service
