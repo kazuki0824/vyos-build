@@ -37,7 +37,13 @@ BOOT_QCOW2="$ANDROID_OUT_DIR/disk-vda.qcow2"
 USERDATA_QCOW2="$ANDROID_OUT_DIR/userdata-empty.qcow2"
 ANDROID_STAGE_DIR="$(pwd)/data/live-build-config/includes.chroot/usr/local/share/android-tv"
 
-"$ANDROID_TOOLS_DIR/get_android_qcow2.sh"
+if [ ! -x $ANDROID_TOOLS_DIR ]; then
+  git clone https://github.com/kazuki0824/android_device_maleicacid_androidtv_tools.git $ANDROID_TOOLS_DIR
+fi
+
+pushd ../
+  "$ANDROID_TOOLS_DIR/get_android_qcow2.sh"
+popd
 
 test -f "$BOOT_QCOW2"
 test -f "$USERDATA_QCOW2"
