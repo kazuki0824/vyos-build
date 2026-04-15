@@ -73,9 +73,9 @@ if [ ! -x $ANDROID_TOOLS_DIR ]; then
   git clone https://github.com/kazuki0824/android_device_maleicacid_androidtv_tools.git $ANDROID_TOOLS_DIR
 fi
 
-pushd ../
-  "$ANDROID_TOOLS_DIR/get_android_qcow2.sh"
-popd
+## Build Android
+(cd ../ && source "$ANDROID_TOOLS_DIR/get_android_qcow2.sh")
+
 
 test -f "$BOOT_QCOW2"
 test -f "$USERDATA_QCOW2"
