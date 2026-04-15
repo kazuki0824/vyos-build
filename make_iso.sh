@@ -1,6 +1,38 @@
 #!/bin/bash
 set -eu -o pipefail
 
+start_sudo_keepalive() {
+  sudo -v || return 1
+
+  local parent_pid=$$
+  (
+    while true; do
+      sleep 60
+      kill -0 "$parent_pid" 2>/dev/null || exit 0
+      sudo -n -v >/dev/null 2>&1 || exit 0
+    done
+  ) &
+
+  SUDO_KEEPALIVE_PID=$!
+  export SUDO_KEEPALIVE_PID
+}
+
+stop_sudo_keepalive() {
+  if [ -n "${SUDO_KEEPALIVE_PID:-}" ] && kill -0 "$SUDO_KEEPALIVE_PID" 2>/dev/null; then
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+  fi
+
+  unset SUDO_KEEPALIVE_PID
+  sudo -k
+}
+
+trap 'stop_sudo_keepalive' EXIT INT TERM
+
+start_sudo_keepalive
+
+
+########################################################################
 
 sudo git clean -xdf
 
