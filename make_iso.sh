@@ -36,7 +36,32 @@ start_sudo_keepalive
 
 sudo git clean -xdf
 
-# Android part
+wget -P ./packages/ https://github.com/tsukumijima/px4_drv/releases/download/v0.4.5/px4-drv-dkms_0.4.5_all.deb
+
+cd scripts/package-build/linux-kernel/
+REF="v6.6.133"
+FIRMWARE_REF="20260309"
+if [ ! -d linux ]; then
+  git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git --no-single-branch --depth 1 -b $REF
+else
+  cd linux
+  git fetch -vv
+  git reset --hard HEAD
+  git switch $REF --detach
+  cd ..
+fi
+if [ ! -d linux-firmware ]; then
+  git clone git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git --single-branch
+else
+  cd linux-firmware
+  git reset --hard HEAD
+  git switch main
+  git pull -vv
+  git switch $FIRMWARE_REF --detach
+  cd ..
+fi
+cd ../../../
+
 ANDROID_TOOLS_DIR="${ANDROID_TOOLS_DIR:-$(realpath ../android_device_maleicacid_androidtv_tools)}"
 ANDROID_PRODUCT="r86s_virtio_tv"
 ANDROID_OUT_DIR="$ANDROID_TOOLS_DIR/build-work/out/target/product/$ANDROID_PRODUCT"
@@ -48,41 +73,10 @@ if [ ! -x $ANDROID_TOOLS_DIR ]; then
   git clone https://github.com/kazuki0824/android_device_maleicacid_androidtv_tools.git $ANDROID_TOOLS_DIR
 fi
 
-## Build Android
-(cd ../ && source "$ANDROID_TOOLS_DIR/get_android_qcow2.sh") &
+pushd ../
+  "$ANDROID_TOOLS_DIR/get_android_qcow2.sh"
+popd
 
-# VyOS part
-wget -P ./packages/ https://github.com/tsukumijima/px4_drv/releases/download/v0.4.5/px4-drv-dkms_0.4.5_all.deb
-
-cd scripts/package-build/linux-kernel/
-REF="v6.6.133"
-FIRMWARE_REF="20260309"
-if [ ! -d linux ]; then
-  git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git --no-single-branch --depth 1 -b $REF &
-else
-  cd linux
-  git fetch -vv
-  git reset --hard HEAD
-  git switch $REF --detach
-  cd ..
-fi
-if [ ! -d linux-firmware ]; then
-  git clone git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git --single-branch &
-else
-  cd linux-firmware
-  git reset --hard HEAD
-  git switch main
-  git pull -vv
-  git switch $FIRMWARE_REF --detach
-  cd ..
-fi
-cd ../../../
-
-# Join
-wait
-
-
-# Create image
 test -f "$BOOT_QCOW2"
 test -f "$USERDATA_QCOW2"
 
