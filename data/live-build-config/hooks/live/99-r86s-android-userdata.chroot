@@ -1,7 +1,4 @@
-#!/bin/sh
-set -eu
-
-python3 - <<'PY'
+#!/usr/bin/env python3
 from pathlib import Path
 import json
 
@@ -132,4 +129,3 @@ text = replace_once(
 
 compile(text, str(installer), 'exec')
 installer.write_text(text)
-PY
