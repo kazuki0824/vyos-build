@@ -19,105 +19,40 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
     return source.replace(old, new, 1)
 
 
-constants = """CONST_RESERVED_SPACE: int = (2 + 1 + 256) * 1024**2
-"""
-constants_new = constants + """
-ANDROID_USERDATA_PARTLABEL: str = 'android-userdata'
-ANDROID_USERDATA_MIN_SIZE: int = 16 * 1024**3
-"""
-text = replace_once(text, constants, constants_new, 'constants')
-
-old_create = """def create_partitions(target_disk: str, target_size: int,
-                      prompt: bool = True) -> None:
-    \"\"\"Create partitions on a target disk
-
-    Args:
-        target_disk (str): a target disk
-        target_size (int): size of disk in bytes
-    \"\"\"
-    # define target rootfs size in KB (smallest unit acceptable by sgdisk)
-    available_size: int = (target_size - CONST_RESERVED_SPACE) // 1024
-    if prompt:
-        rootfs_size: int = ask_root_size(available_size)
-    else:
-        rootfs_size: int = available_size
-
-    print(MSG_INFO_INSTALL_PARTITIONING)
-    raid.clear()
-    disk.disk_cleanup(target_disk)
-    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
-                                                           rootfs_size)
-
-    return disk_details
-
-"""
-
-new_create = """def _is_android_userdata_partition(partition: str) -> bool:
-    return cmdl(['lsblk', '-no', 'PARTLABEL', partition]).strip() == \
-        ANDROID_USERDATA_PARTLABEL
-
-
-def create_partitions(target_disk: str, target_size: int,
-                      prompt: bool = True) -> None:
-    \"\"\"Create VyOS partitions plus a fresh Android userdata partition.
-
-    A full install intentionally clears the whole target disk. VyOS keeps
-    using its standard p1-p3 layout, while at least 16 GiB is reserved at
-    the end of the disk for p4 labelled android-userdata.
-    \"\"\"
-    available_bytes = (
-        target_size - CONST_RESERVED_SPACE - ANDROID_USERDATA_MIN_SIZE
-    )
-    if available_bytes < CONST_MIN_ROOT_SIZE:
+text = replace_once(
+    text,
+    '    available_size: int = (target_size - CONST_RESERVED_SPACE) // 1024\n',
+    """    available_size: int = (
+        target_size - CONST_RESERVED_SPACE - 16 * 1024**3
+    ) // 1024
+    if available_size < CONST_MIN_ROOT_SIZE // 1024:
         raise RuntimeError(
             'Not enough disk space for the VyOS root partition and '
             'Android userdata partition'
         )
+""",
+    'root size reservation',
+)
 
-    available_size: int = available_bytes // 1024
-    if prompt:
-        rootfs_size: int = ask_root_size(available_size)
-    else:
-        rootfs_size: int = available_size
+text = replace_once(
+    text,
+    """    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
+                                                           rootfs_size)
 
-    print(MSG_INFO_INSTALL_PARTITIONING)
-    raid.clear()
+    return disk_details
+""",
+    """    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
+                                                           rootfs_size)
 
-    # A full install is destructive by design: clear all existing partitions,
-    # including any previous Android userdata partition.
-    disk.disk_cleanup(target_disk)
-
-    # Keep the standard VyOS p1-p3 implementation instead of duplicating it.
-    disk_details: disk.DiskDetails = disk.parttable_create(
-        target_disk, rootfs_size
-    )
-
-    # Use all space left after p3 for Android userdata.
     run(
-        f'sgdisk -n4:0:0 -t4:8300 '
-        f'-c4:{ANDROID_USERDATA_PARTLABEL} {target_disk}'
+        f'sgdisk -n4:0:0 -t4:8300 -c4:android-userdata {target_disk}'
     )
     sync()
     run(f'partx -u {target_disk}')
 
     return disk_details
-
-
-"""
-text = replace_once(text, old_create, new_create, 'create_partitions')
-
-old_scan = """    for disk_name in disks:
-        for partition in disk.partition_list(disk_name):
-            if disk.partition_mount(partition, mnt_tmp):
-"""
-new_scan = """    for disk_name in disks:
-        for partition in disk.partition_list(disk_name):
-            if _is_android_userdata_partition(partition):
-                continue
-            if disk.partition_mount(partition, mnt_tmp):
-"""
-text = replace_once(
-    text, old_scan, new_scan, 'previous-installation partition scan'
+""",
+    'Android userdata partition',
 )
 
 text = replace_once(
