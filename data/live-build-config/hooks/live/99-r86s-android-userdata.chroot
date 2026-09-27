@@ -2,10 +2,9 @@
 from pathlib import Path
 import json
 
-version_file = Path('/usr/share/vyos/version.json')
-if not version_file.exists():
-    raise SystemExit(0)
-if json.loads(version_file.read_text()).get('flavor') != 'r86s-kvm':
+if json.loads(
+    Path('/usr/share/vyos/version.json').read_text()
+).get('flavor') != 'r86s-kvm':
     raise SystemExit(0)
 
 installer = Path('/usr/libexec/vyos/op_mode/image_installer.py')
