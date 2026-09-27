@@ -47,8 +47,6 @@ text = replace_once(
     run(
         f'sgdisk -n4:0:0 -t4:8300 -c4:android-userdata {target_disk}'
     )
-    sync()
-    run(f'partx -u {target_disk}')
 
     return disk_details
 """,
