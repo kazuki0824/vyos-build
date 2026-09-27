@@ -106,6 +106,6 @@ cd scripts/package-build/linux-kernel/
 mv -v ./*.deb ../../../packages/
 cd ../../../
 
-sudo env VYOS1X_PATCH_SCRIPT=/vyos/scripts/image-build/patch-vyos-1x-r86s-kvm.py ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
+sudo ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
 EOF
 
