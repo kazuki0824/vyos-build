@@ -1,0 +1,201 @@
+#!/bin/sh
+set -eu
+
+python3 - <<'PY'
+from pathlib import Path
+import json
+
+version_file = Path('/usr/share/vyos/version.json')
+if not version_file.exists():
+    raise SystemExit(0)
+if json.loads(version_file.read_text()).get('flavor') != 'r86s-kvm':
+    raise SystemExit(0)
+
+installer = Path('/usr/libexec/vyos/op_mode/image_installer.py')
+text = installer.read_text()
+
+
+def replace_once(source: str, old: str, new: str, label: str) -> str:
+    count = source.count(old)
+    if count != 1:
+        raise SystemExit(f'{label}: expected exactly one match, found {count}')
+    return source.replace(old, new, 1)
+
+
+constants = """CONST_RESERVED_SPACE: int = (2 + 1 + 256) * 1024**2
+"""
+constants_new = constants + """
+ANDROID_USERDATA_PARTLABEL: str = 'android-userdata'
+ANDROID_USERDATA_MIN_SIZE: int = 16 * 1024**3
+"""
+text = replace_once(text, constants, constants_new, 'constants')
+
+old_create = """def create_partitions(target_disk: str, target_size: int,
+                      prompt: bool = True) -> None:
+    \"\"\"Create partitions on a target disk
+
+    Args:
+        target_disk (str): a target disk
+        target_size (int): size of disk in bytes
+    \"\"\"
+    # define target rootfs size in KB (smallest unit acceptable by sgdisk)
+    available_size: int = (target_size - CONST_RESERVED_SPACE) // 1024
+    if prompt:
+        rootfs_size: int = ask_root_size(available_size)
+    else:
+        rootfs_size: int = available_size
+
+    print(MSG_INFO_INSTALL_PARTITIONING)
+    raid.clear()
+    disk.disk_cleanup(target_disk)
+    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
+                                                           rootfs_size)
+
+    return disk_details
+
+"""
+
+new_create = """def _partition_path(drive_path: str, number: int) -> str:
+    separator = 'p' if drive_path[-1].isdigit() else ''
+    return f'{drive_path}{separator}{number}'
+
+
+def _android_userdata_start_sector(target_disk: str):
+    lsblk = loads(cmdl([
+        'lsblk', '-Jpo', 'NAME,TYPE,PARTLABEL,START', target_disk
+    ]))
+    devices = lsblk.get('blockdevices') or []
+    children = devices[0].get('children', []) if devices else []
+    matches = [
+        part for part in children
+        if part.get('type') == 'part'
+        and part.get('partlabel') == ANDROID_USERDATA_PARTLABEL
+    ]
+
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise RuntimeError(
+            f'Multiple {ANDROID_USERDATA_PARTLABEL} partitions found on '
+            f'{target_disk}'
+        )
+
+    expected = _partition_path(target_disk, 4)
+    if matches[0].get('name') != expected:
+        raise RuntimeError(
+            f'{ANDROID_USERDATA_PARTLABEL} must be partition 4 '
+            f'({expected}), found {matches[0].get("name")}'
+        )
+
+    return int(matches[0]['start'])
+
+
+def _is_android_userdata_partition(partition: str) -> bool:
+    return cmdl(['lsblk', '-no', 'PARTLABEL', partition]).strip() == \
+        ANDROID_USERDATA_PARTLABEL
+
+
+def create_partitions(target_disk: str, target_size: int,
+                      prompt: bool = True) -> None:
+    \"\"\"Create the VyOS partitions while keeping Android userdata separate.
+
+    A fresh r86s-kvm install reserves at least 16 GiB at the end of the
+    target disk for partition 4. A reinstall preserves an existing partition
+    4 labelled android-userdata and recreates only partitions 1 through 3.
+    \"\"\"
+    userdata_start = _android_userdata_start_sector(target_disk)
+
+    if userdata_start is None:
+        available_bytes = (
+            target_size - CONST_RESERVED_SPACE - ANDROID_USERDATA_MIN_SIZE
+        )
+    else:
+        sector_size = int(cmdl(['blockdev', '--getss', target_disk]))
+        available_bytes = (
+            userdata_start * sector_size - CONST_RESERVED_SPACE
+        )
+
+    if available_bytes < CONST_MIN_ROOT_SIZE:
+        raise RuntimeError(
+            'Not enough disk space for the VyOS root partition and '
+            'Android userdata partition'
+        )
+
+    available_size: int = available_bytes // 1024
+    if prompt:
+        rootfs_size: int = ask_root_size(available_size)
+    else:
+        rootfs_size: int = available_size
+
+    print(MSG_INFO_INSTALL_PARTITIONING)
+    raid.clear()
+
+    if userdata_start is None:
+        disk.disk_cleanup(target_disk)
+    else:
+        partitions = set(disk.partition_list(target_disk))
+        for number in (1, 2, 3):
+            partition = _partition_path(target_disk, number)
+            if partition in partitions:
+                run(f'wipefs -af {partition}')
+                run(f'sgdisk -d {number} {target_disk}')
+
+    command = (
+        f'sgdisk -a1 '
+        f'-n1:2048:4095 -t1:EF02 '
+        f'-n2:4096:+256M -t2:EF00 '
+        f'-n3:0:+{rootfs_size}K -t3:8300 '
+    )
+    if userdata_start is None:
+        command += (
+            f'-n4:0:0 -t4:8300 -c4:{ANDROID_USERDATA_PARTLABEL} '
+        )
+    command += target_disk
+    run(command)
+
+    sync()
+    run(f'partx -u {target_disk}')
+
+    partitions = disk.partition_list(target_disk)
+    return disk.DiskDetails(
+        name=target_disk,
+        partition={
+            'efi': next(
+                x for x in partitions
+                if x == _partition_path(target_disk, 2)
+            ),
+            'root': next(
+                x for x in partitions
+                if x == _partition_path(target_disk, 3)
+            ),
+        },
+    )
+
+
+"""
+text = replace_once(text, old_create, new_create, 'create_partitions')
+
+old_scan = """    for disk_name in disks:
+        for partition in disk.partition_list(disk_name):
+            if disk.partition_mount(partition, mnt_tmp):
+"""
+new_scan = """    for disk_name in disks:
+        for partition in disk.partition_list(disk_name):
+            if _is_android_userdata_partition(partition):
+                continue
+            if disk.partition_mount(partition, mnt_tmp):
+"""
+text = replace_once(
+    text, old_scan, new_scan, 'previous-installation partition scan'
+)
+
+text = replace_once(
+    text,
+    '        install_target = check_raid_install(disks)\n',
+    '        install_target = None  # r86s-kvm uses one userdata block device\n',
+    'RAID install call',
+)
+
+compile(text, str(installer), 'exec')
+installer.write_text(text)
+PY

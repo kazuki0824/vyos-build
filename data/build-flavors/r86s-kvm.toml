@@ -146,8 +146,9 @@ run systemctl start libvirtd.service
 run systemctl start android-tv-bluealsa.service
 run systemctl start android-tv-bluealsa-aplay.service
 
-# Always refresh the persistent definition so upgrades pick up storage changes.
-run virsh define /usr/local/share/android-tv/android-tv.xml
+if ! run virsh dominfo android-tv >/dev/null 2>&1; then
+  run virsh define /usr/local/share/android-tv/android-tv.xml
+fi
 
 if ! run virsh dominfo android-tv | grep -q 'Autostart:.*enable'; then
   run virsh autostart android-tv
