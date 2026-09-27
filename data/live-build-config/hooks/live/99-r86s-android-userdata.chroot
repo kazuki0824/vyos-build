@@ -55,66 +55,22 @@ old_create = """def create_partitions(target_disk: str, target_size: int,
 
 """
 
-new_create = """def _partition_path(drive_path: str, number: int) -> str:
-    separator = 'p' if drive_path[-1].isdigit() else ''
-    return f'{drive_path}{separator}{number}'
-
-
-def _android_userdata_start_sector(target_disk: str):
-    lsblk = loads(cmdl([
-        'lsblk', '-Jpo', 'NAME,TYPE,PARTLABEL,START', target_disk
-    ]))
-    devices = lsblk.get('blockdevices') or []
-    children = devices[0].get('children', []) if devices else []
-    matches = [
-        part for part in children
-        if part.get('type') == 'part'
-        and part.get('partlabel') == ANDROID_USERDATA_PARTLABEL
-    ]
-
-    if not matches:
-        return None
-    if len(matches) != 1:
-        raise RuntimeError(
-            f'Multiple {ANDROID_USERDATA_PARTLABEL} partitions found on '
-            f'{target_disk}'
-        )
-
-    expected = _partition_path(target_disk, 4)
-    if matches[0].get('name') != expected:
-        raise RuntimeError(
-            f'{ANDROID_USERDATA_PARTLABEL} must be partition 4 '
-            f'({expected}), found {matches[0].get("name")}'
-        )
-
-    return int(matches[0]['start'])
-
-
-def _is_android_userdata_partition(partition: str) -> bool:
+new_create = """def _is_android_userdata_partition(partition: str) -> bool:
     return cmdl(['lsblk', '-no', 'PARTLABEL', partition]).strip() == \
         ANDROID_USERDATA_PARTLABEL
 
 
 def create_partitions(target_disk: str, target_size: int,
                       prompt: bool = True) -> None:
-    \"\"\"Create the VyOS partitions while keeping Android userdata separate.
+    \"\"\"Create VyOS partitions plus a fresh Android userdata partition.
 
-    A fresh r86s-kvm install reserves at least 16 GiB at the end of the
-    target disk for partition 4. A reinstall preserves an existing partition
-    4 labelled android-userdata and recreates only partitions 1 through 3.
+    A full install intentionally clears the whole target disk. VyOS keeps
+    using its standard p1-p3 layout, while at least 16 GiB is reserved at
+    the end of the disk for p4 labelled android-userdata.
     \"\"\"
-    userdata_start = _android_userdata_start_sector(target_disk)
-
-    if userdata_start is None:
-        available_bytes = (
-            target_size - CONST_RESERVED_SPACE - ANDROID_USERDATA_MIN_SIZE
-        )
-    else:
-        sector_size = int(cmdl(['blockdev', '--getss', target_disk]))
-        available_bytes = (
-            userdata_start * sector_size - CONST_RESERVED_SPACE
-        )
-
+    available_bytes = (
+        target_size - CONST_RESERVED_SPACE - ANDROID_USERDATA_MIN_SIZE
+    )
     if available_bytes < CONST_MIN_ROOT_SIZE:
         raise RuntimeError(
             'Not enough disk space for the VyOS root partition and '
@@ -130,46 +86,24 @@ def create_partitions(target_disk: str, target_size: int,
     print(MSG_INFO_INSTALL_PARTITIONING)
     raid.clear()
 
-    if userdata_start is None:
-        disk.disk_cleanup(target_disk)
-    else:
-        partitions = set(disk.partition_list(target_disk))
-        for number in (1, 2, 3):
-            partition = _partition_path(target_disk, number)
-            if partition in partitions:
-                run(f'wipefs -af {partition}')
-                run(f'sgdisk -d {number} {target_disk}')
+    # A full install is destructive by design: clear all existing partitions,
+    # including any previous Android userdata partition.
+    disk.disk_cleanup(target_disk)
 
-    command = (
-        f'sgdisk -a1 '
-        f'-n1:2048:4095 -t1:EF02 '
-        f'-n2:4096:+256M -t2:EF00 '
-        f'-n3:0:+{rootfs_size}K -t3:8300 '
+    # Keep the standard VyOS p1-p3 implementation instead of duplicating it.
+    disk_details: disk.DiskDetails = disk.parttable_create(
+        target_disk, rootfs_size
     )
-    if userdata_start is None:
-        command += (
-            f'-n4:0:0 -t4:8300 -c4:{ANDROID_USERDATA_PARTLABEL} '
-        )
-    command += target_disk
-    run(command)
 
+    # Use all space left after p3 for Android userdata.
+    run(
+        f'sgdisk -n4:0:0 -t4:8300 '
+        f'-c4:{ANDROID_USERDATA_PARTLABEL} {target_disk}'
+    )
     sync()
     run(f'partx -u {target_disk}')
 
-    partitions = disk.partition_list(target_disk)
-    return disk.DiskDetails(
-        name=target_disk,
-        partition={
-            'efi': next(
-                x for x in partitions
-                if x == _partition_path(target_disk, 2)
-            ),
-            'root': next(
-                x for x in partitions
-                if x == _partition_path(target_disk, 3)
-            ),
-        },
-    )
+    return disk_details
 
 
 """
