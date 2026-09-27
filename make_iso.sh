@@ -75,10 +75,6 @@ fi
 ## Build Android
 (cd ../ && source "$ANDROID_TOOLS_DIR/get_android_qcow2.sh")
 
-# get_android_qcow2.sh also emits a userdata template, but r86s-kvm now uses
-# a dedicated raw host partition for Android userdata.
-rm -f "$ANDROID_OUT_DIR/userdata-empty.qcow2"
-
 test -f "$BOOT_QCOW2"
 
 sudo rm -rf "$ANDROID_STAGE_DIR"
