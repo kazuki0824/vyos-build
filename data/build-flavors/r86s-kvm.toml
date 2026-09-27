@@ -75,9 +75,9 @@ data = """
       <target dev='vda' bus='virtio'/>
       <readonly/>
     </disk>
-    <disk type='file' device='disk'>
-      <driver name='qemu' type='qcow2'/>
-      <source file='/config/android-tv/androidtv-userdata.qcow2'/>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source dev='/dev/disk/by-partlabel/android-userdata'/>
       <target dev='vdb' bus='virtio'/>
     </disk>
     <hostdev mode='subsystem' type='pci' managed='yes'>
@@ -131,10 +131,9 @@ data = """
 #!/bin/vbash
 source /opt/vyatta/etc/functions/script-template
 
-run mkdir -p /config/android-tv
-
-if [ ! -f /config/android-tv/androidtv-userdata.qcow2 ]; then
-  run cp -f /usr/local/share/android-tv/userdata-empty.qcow2 /config/android-tv/androidtv-userdata.qcow2
+if [ ! -b /dev/disk/by-partlabel/android-userdata ]; then
+  echo "Android TV userdata partition /dev/disk/by-partlabel/android-userdata is missing" >&2
+  exit 1
 fi
 
 run systemctl enable bluetooth.service
@@ -147,9 +146,8 @@ run systemctl start libvirtd.service
 run systemctl start android-tv-bluealsa.service
 run systemctl start android-tv-bluealsa-aplay.service
 
-if ! run virsh dominfo android-tv >/dev/null 2>&1; then
-  run virsh define /usr/local/share/android-tv/android-tv.xml
-fi
+# Always refresh the persistent definition so upgrades pick up storage changes.
+run virsh define /usr/local/share/android-tv/android-tv.xml
 
 if ! run virsh dominfo android-tv | grep -q 'Autostart:.*enable'; then
   run virsh autostart android-tv

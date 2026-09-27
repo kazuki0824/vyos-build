@@ -66,7 +66,6 @@ ANDROID_TOOLS_DIR="${ANDROID_TOOLS_DIR:-$(realpath ../android_device_maleicacid_
 ANDROID_PRODUCT="r86s_virtio_tv"
 ANDROID_OUT_DIR="$ANDROID_TOOLS_DIR/build-work/out/target/product/$ANDROID_PRODUCT"
 BOOT_QCOW2="$ANDROID_OUT_DIR/disk-vda.qcow2"
-USERDATA_QCOW2="$ANDROID_OUT_DIR/userdata-empty.qcow2"
 ANDROID_STAGE_DIR="$(pwd)/data/live-build-config/includes.chroot/usr/local/share/android-tv"
 
 if [ ! -x $ANDROID_TOOLS_DIR ]; then
@@ -78,12 +77,10 @@ fi
 
 
 test -f "$BOOT_QCOW2"
-test -f "$USERDATA_QCOW2"
 
 sudo rm -rf "$ANDROID_STAGE_DIR"
 sudo mkdir -p "$ANDROID_STAGE_DIR"
 sudo cp -f "$BOOT_QCOW2" "$ANDROID_STAGE_DIR/androidtv.qcow2"
-sudo cp -f "$USERDATA_QCOW2" "$ANDROID_STAGE_DIR/userdata-empty.qcow2"
 
 DOCKER_ENV_ARGS=()
 if [ -n "${VYOS1X_REPO_URL:-}" ]; then
@@ -109,6 +106,6 @@ cd scripts/package-build/linux-kernel/
 mv -v ./*.deb ../../../packages/
 cd ../../../
 
-sudo ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
+sudo env VYOS1X_PATCH_SCRIPT=/vyos/scripts/image-build/patch-vyos-1x-r86s-kvm.py ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
 EOF
 

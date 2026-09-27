@@ -31,6 +31,7 @@ import argparse
 import datetime
 import functools
 import string
+import subprocess
 
 class ImageBuildError(Exception):
     pass
@@ -123,6 +124,13 @@ def build():
                 raise
         # alternatively, pass commit hash or tag as arg:
         repo_vyos_1x.git.checkout(branch_name)
+
+        patch_script = os.getenv('VYOS1X_PATCH_SCRIPT')
+        if patch_script:
+            patch_script = os.path.abspath(patch_script)
+            if not os.path.isfile(patch_script):
+                raise ImageBuildError(f'vyos-1x patch script not found: {patch_script}')
+            subprocess.run([patch_script, path_vyos_1x], check=True)
     except Exception as e:
         raise ImageBuildError(f'Could not retrieve vyos-1x from branch {branch_name}: {repr(e)}')
 
