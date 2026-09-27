@@ -75,9 +75,9 @@ data = """
       <target dev='vda' bus='virtio'/>
       <readonly/>
     </disk>
-    <disk type='file' device='disk'>
-      <driver name='qemu' type='qcow2'/>
-      <source file='/config/android-tv/androidtv-userdata.qcow2'/>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source dev='/dev/disk/by-partlabel/android-userdata'/>
       <target dev='vdb' bus='virtio'/>
     </disk>
     <hostdev mode='subsystem' type='pci' managed='yes'>
@@ -131,10 +131,9 @@ data = """
 #!/bin/vbash
 source /opt/vyatta/etc/functions/script-template
 
-run mkdir -p /config/android-tv
-
-if [ ! -f /config/android-tv/androidtv-userdata.qcow2 ]; then
-  run cp -f /usr/local/share/android-tv/userdata-empty.qcow2 /config/android-tv/androidtv-userdata.qcow2
+if [ ! -b /dev/disk/by-partlabel/android-userdata ]; then
+  echo "Android TV userdata partition /dev/disk/by-partlabel/android-userdata is missing" >&2
+  exit 1
 fi
 
 run systemctl enable bluetooth.service

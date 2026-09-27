@@ -66,7 +66,6 @@ ANDROID_TOOLS_DIR="${ANDROID_TOOLS_DIR:-$(realpath ../android_device_maleicacid_
 ANDROID_PRODUCT="r86s_virtio_tv"
 ANDROID_OUT_DIR="$ANDROID_TOOLS_DIR/build-work/out/target/product/$ANDROID_PRODUCT"
 BOOT_QCOW2="$ANDROID_OUT_DIR/disk-vda.qcow2"
-USERDATA_QCOW2="$ANDROID_OUT_DIR/userdata-empty.qcow2"
 ANDROID_STAGE_DIR="$(pwd)/data/live-build-config/includes.chroot/usr/local/share/android-tv"
 
 if [ ! -x $ANDROID_TOOLS_DIR ]; then
@@ -76,14 +75,11 @@ fi
 ## Build Android
 (cd ../ && source "$ANDROID_TOOLS_DIR/get_android_qcow2.sh")
 
-
 test -f "$BOOT_QCOW2"
-test -f "$USERDATA_QCOW2"
 
 sudo rm -rf "$ANDROID_STAGE_DIR"
 sudo mkdir -p "$ANDROID_STAGE_DIR"
 sudo cp -f "$BOOT_QCOW2" "$ANDROID_STAGE_DIR/androidtv.qcow2"
-sudo cp -f "$USERDATA_QCOW2" "$ANDROID_STAGE_DIR/userdata-empty.qcow2"
 
 DOCKER_ENV_ARGS=()
 if [ -n "${VYOS1X_REPO_URL:-}" ]; then

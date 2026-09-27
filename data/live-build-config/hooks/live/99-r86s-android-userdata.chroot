@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import json
+
+if json.loads(
+    Path('/usr/share/vyos/version.json').read_text()
+).get('flavor') != 'r86s-kvm':
+    raise SystemExit(0)
+
+installer = Path('/usr/libexec/vyos/op_mode/image_installer.py')
+text = installer.read_text()
+
+
+def replace_once(source: str, old: str, new: str, label: str) -> str:
+    count = source.count(old)
+    if count != 1:
+        raise SystemExit(f'{label}: expected exactly one match, found {count}')
+    return source.replace(old, new, 1)
+
+
+text = replace_once(
+    text,
+    '    available_size: int = (target_size - CONST_RESERVED_SPACE) // 1024\n',
+    """    available_size: int = (
+        target_size - CONST_RESERVED_SPACE - 16 * 1024**3
+    ) // 1024
+    if available_size < CONST_MIN_ROOT_SIZE // 1024:
+        raise RuntimeError(
+            'Not enough disk space for the VyOS root partition and '
+            'Android userdata partition'
+        )
+""",
+    'root size reservation',
+)
+
+text = replace_once(
+    text,
+    """    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
+                                                           rootfs_size)
+
+    return disk_details
+""",
+    """    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
+                                                           rootfs_size)
+
+    run(
+        f'sgdisk -n4:0:0 -t4:8300 -c4:android-userdata {target_disk}'
+    )
+
+    return disk_details
+""",
+    'Android userdata partition',
+)
+
+text = replace_once(
+    text,
+    '        install_target = check_raid_install(disks)\n',
+    '        install_target = None  # r86s-kvm uses one userdata block device\n',
+    'RAID install call',
+)
+
+compile(text, str(installer), 'exec')
+installer.write_text(text)
