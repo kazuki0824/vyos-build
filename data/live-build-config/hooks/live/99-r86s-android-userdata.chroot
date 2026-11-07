@@ -21,13 +21,18 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
 text = replace_once(
     text,
     '    available_size: int = (target_size - CONST_RESERVED_SPACE) // 1024\n',
-    """    available_size: int = (
+    """    metadata_image = Path('/usr/local/share/android-tv/metadata-empty.img')
+    metadata_size = metadata_image.stat().st_size
+    if metadata_size != 34 * 1024**2:
+        raise RuntimeError('Unexpected Android metadata disk image size')
+    available_size: int = (
         target_size - CONST_RESERVED_SPACE - 16 * 1024**3
+        - metadata_size - 1024**2
     ) // 1024
     if available_size < CONST_MIN_ROOT_SIZE // 1024:
         raise RuntimeError(
             'Not enough disk space for the VyOS root partition and '
-            'Android userdata partition'
+            'Android userdata and metadata partitions'
         )
 """,
     'root size reservation',
@@ -43,13 +48,25 @@ text = replace_once(
     """    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
                                                            rootfs_size)
 
-    run(
-        f'sgdisk -n4:0:0 -t4:8300 -c4:android-userdata {target_disk}'
+    # Allocate the small metadata disk first, then give userdata the remainder.
+    cmdl(['sgdisk', f'-n5:0:+{metadata_size // 1024}K', '-t5:8300',
+          '-c5:android-metadata', '-n4:0:0', '-t4:8300',
+          '-c4:android-userdata', target_disk])
+    cmdl(['partx', '-u', target_disk])
+    cmdl(['udevadm', 'settle'])
+    metadata_partition = next(
+        path for path in disk.partition_list(target_disk) if path.endswith('5')
     )
+    if not Path(metadata_partition).is_block_device():
+        raise RuntimeError('Android metadata partition is not a block device')
+    # The template contains a 512-byte-sector GPT and a blank 32 MiB partition.
+    # Copy only during destructive full installation; image upgrades retain it.
+    cmdl(['dd', f'if={metadata_image}', f'of={metadata_partition}',
+          'bs=1M', 'conv=fsync,notrunc'])
 
     return disk_details
 """,
-    'Android userdata partition',
+    'Android persistent partitions',
 )
 
 text = replace_once(
