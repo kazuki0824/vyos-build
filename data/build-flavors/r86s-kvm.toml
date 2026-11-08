@@ -80,6 +80,12 @@ data = """
       <source dev='/dev/disk/by-partlabel/android-userdata'/>
       <target dev='vdb' bus='virtio'/>
     </disk>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source dev='/dev/disk/by-partlabel/android-metadata'/>
+      <target dev='vdc' bus='virtio'/>
+      <blockio logical_block_size='512' physical_block_size='512'/>
+    </disk>
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <source>
         <address domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
@@ -136,6 +142,18 @@ if [ ! -b /dev/disk/by-partlabel/android-userdata ]; then
   exit 1
 fi
 
+if [ ! -b /dev/disk/by-partlabel/android-metadata ]; then
+  echo "Android TV metadata partition is missing; migrate userdata and metadata together" >&2
+  exit 1
+fi
+
+userdata_parent=$(lsblk -ndpo PKNAME /dev/disk/by-partlabel/android-userdata)
+metadata_parent=$(lsblk -ndpo PKNAME /dev/disk/by-partlabel/android-metadata)
+if [ -z "$userdata_parent" ] || [ "$userdata_parent" != "$metadata_parent" ]; then
+  echo "Android TV userdata and metadata must belong to the same installation disk" >&2
+  exit 1
+fi
+
 run systemctl enable bluetooth.service
 run systemctl enable libvirtd.service
 run systemctl enable android-tv-bluealsa.service
@@ -146,9 +164,7 @@ run systemctl start libvirtd.service
 run systemctl start android-tv-bluealsa.service
 run systemctl start android-tv-bluealsa-aplay.service
 
-if ! run virsh dominfo android-tv >/dev/null 2>&1; then
-  run virsh define /usr/local/share/android-tv/android-tv.xml
-fi
+run virsh define /usr/local/share/android-tv/android-tv.xml || exit 1
 
 if ! run virsh dominfo android-tv | grep -q 'Autostart:.*enable'; then
   run virsh autostart android-tv
