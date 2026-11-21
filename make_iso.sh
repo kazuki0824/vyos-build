@@ -66,23 +66,29 @@ ANDROID_TOOLS_DIR="${ANDROID_TOOLS_DIR:-$(realpath ../android_device_maleicacid_
 ANDROID_PRODUCT="r86s_virtio_tv"
 ANDROID_OUT_DIR="$ANDROID_TOOLS_DIR/build-work/out/target/product/$ANDROID_PRODUCT"
 BOOT_QCOW2="$ANDROID_OUT_DIR/disk-vda.qcow2"
-METADATA_QCOW2="$ANDROID_OUT_DIR/metadata-empty.qcow2"
 ANDROID_STAGE_DIR="$(pwd)/data/live-build-config/includes.chroot/usr/local/share/android-tv"
 
-if [ ! -x $ANDROID_TOOLS_DIR ]; then
-  git clone https://github.com/kazuki0824/android_device_maleicacid_androidtv_tools.git $ANDROID_TOOLS_DIR
+if [ ! -d "$ANDROID_TOOLS_DIR" ]; then
+  git clone https://github.com/kazuki0824/android_device_maleicacid_androidtv_tools.git "$ANDROID_TOOLS_DIR"
 fi
 
-## Build Android
-(cd ../ && source "$ANDROID_TOOLS_DIR/get_android_qcow2.sh")
+## Build Android using the existing entry point, with an explicit R86S product.
+ANDROID_PRODUCT="$ANDROID_PRODUCT" bash "$ANDROID_TOOLS_DIR/get_android_qcow2.sh"
 
-test -f "$BOOT_QCOW2"
-test -f "$METADATA_QCOW2"
+test -s "$BOOT_QCOW2"
 
 sudo rm -rf "$ANDROID_STAGE_DIR"
 sudo mkdir -p "$ANDROID_STAGE_DIR"
 sudo cp -f "$BOOT_QCOW2" "$ANDROID_STAGE_DIR/androidtv.qcow2"
-sudo qemu-img convert -f qcow2 -O raw "$METADATA_QCOW2" "$ANDROID_STAGE_DIR/metadata-empty.img"
+
+# Create a *fresh*, blank metadata installation template for every ISO.
+# Never copy the QEMU metadata-empty.qcow2: it may contain FBE keys.
+# The host installer writes this raw 34 MiB disk to its GPT #5; guest
+# /dev/vdc1 is the 32 MiB 'metadata' partition inside this nested GPT.
+sudo truncate -s 34M "$ANDROID_STAGE_DIR/metadata-empty.img"
+sudo sgdisk --clear --new=1:2048:+32M --typecode=1:8300 \
+  --change-name=1:metadata "$ANDROID_STAGE_DIR/metadata-empty.img"
+sudo sgdisk --verify "$ANDROID_STAGE_DIR/metadata-empty.img"
 
 DOCKER_ENV_ARGS=()
 if [ -n "${VYOS1X_REPO_URL:-}" ]; then
