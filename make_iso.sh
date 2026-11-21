@@ -72,81 +72,22 @@ if [ ! -f "$ANDROID_TOOLS_DIR/build_android.sh" ]; then
   git clone https://github.com/kazuki0824/android_device_maleicacid_androidtv_tools.git "$ANDROID_TOOLS_DIR"
 fi
 
-## Build Android raw image using the shared product build path, not QEMU seed generation.
-# build_android.sh accepts the product explicitly. Never source a script that
-# derives its own location from BASH_SOURCE/$0.
+## Build Android without regenerating QEMU-only data seeds.
 bash "$ANDROID_TOOLS_DIR/build_android.sh" "$ANDROID_PRODUCT"
-
 BOOT_RAW="$ANDROID_OUT_DIR/disk-vda.img"
 test -s "$BOOT_RAW"
 test -s "$PERSIST_IMAGE"
 test "$(stat -c %s "$PERSIST_IMAGE")" -eq $((16 * 1024 * 1024))
 
-# Fail if the build has not disabled legacy writable state on vda.
-sgdisk --print "$BOOT_RAW" | grep -Eq 'persist-unused
-DOCKER_ENV_ARGS=()
-if [ -n "${VYOS1X_REPO_URL:-}" ]; then
-  DOCKER_ENV_ARGS+=(-e "VYOS1X_REPO_URL=$VYOS1X_REPO_URL")
-fi
-
-sudo docker pull vyos/vyos-build:current
-sudo docker run --privileged --rm -i "${DOCKER_ENV_ARGS[@]}" -v $(pwd):/vyos -w /vyos vyos/vyos-build:current bash << EOF
-set -eu -o pipefail
-sudo mount -i -o remount,exec,dev /vyos
-
-sudo apt update
-sudo apt install llvm-dev libclang-dev clang flex bison bc kmod libssl-dev libelf-dev python3-dev libtraceevent-dev -y
-
-# note: https://lore.kernel.org/lkml/20240401212303.537355-4-ojeda@kernel.org/
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly-2023-08-01 --component rust-src -y
-source '/home/vyos_bld/.cargo/env'
-cargo install bindgen-cli --version 0.68.1 --locked
-
-cd scripts/package-build/linux-kernel/
-./build-kernel.sh
-./build-linux-firmware.sh
-mv -v ./*.deb ../../../packages/
-cd ../../../
-
-sudo ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
-EOF
-
-
-sgdisk --print "$BOOT_RAW" | grep -Eq 'metadata-unused
-DOCKER_ENV_ARGS=()
-if [ -n "${VYOS1X_REPO_URL:-}" ]; then
-  DOCKER_ENV_ARGS+=(-e "VYOS1X_REPO_URL=$VYOS1X_REPO_URL")
-fi
-
-sudo docker pull vyos/vyos-build:current
-sudo docker run --privileged --rm -i "${DOCKER_ENV_ARGS[@]}" -v $(pwd):/vyos -w /vyos vyos/vyos-build:current bash << EOF
-set -eu -o pipefail
-sudo mount -i -o remount,exec,dev /vyos
-
-sudo apt update
-sudo apt install llvm-dev libclang-dev clang flex bison bc kmod libssl-dev libelf-dev python3-dev libtraceevent-dev -y
-
-# note: https://lore.kernel.org/lkml/20240401212303.537355-4-ojeda@kernel.org/
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly-2023-08-01 --component rust-src -y
-source '/home/vyos_bld/.cargo/env'
-cargo install bindgen-cli --version 0.68.1 --locked
-
-cd scripts/package-build/linux-kernel/
-./build-kernel.sh
-./build-linux-firmware.sh
-mv -v ./*.deb ../../../packages/
-cd ../../../
-
-sudo ./build-vyos-image r86s-kvm --architecture amd64 --build-by 'maleicacid824+dev@gmail.com' --custom-package bluez --custom-package bluez-alsa-utils --custom-package alsa-utils --custom-package zstd --custom-package python3-dbus
-EOF
-
-
+# Require the boot disk produced by the external-state GPT build.
+sgdisk --print "$BOOT_RAW" | grep -Eq 'persist-unused$'
+sgdisk --print "$BOOT_RAW" | grep -Eq 'metadata-unused$'
 
 sudo rm -rf "$ANDROID_STAGE_DIR"
 sudo mkdir -p "$ANDROID_STAGE_DIR"
 sudo qemu-img convert -f raw -O qcow2 "$BOOT_RAW" "$ANDROID_STAGE_DIR/androidtv.qcow2"
-# This FAT32 image already includes GRUB's initial environment and A/B control.
-# The VyOS installer copies it only on destructive NEW installation.
+# Only the destructive install path may copy this initialized FAT32 volume
+# into the new persistent host GPT #6.
 sudo cp -f "$PERSIST_IMAGE" "$ANDROID_STAGE_DIR/persist.img"
 
 DOCKER_ENV_ARGS=()
