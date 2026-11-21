@@ -86,6 +86,12 @@ data = """
       <target dev='vdc' bus='virtio'/>
       <blockio logical_block_size='512' physical_block_size='512'/>
     </disk>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source dev='/dev/disk/by-partlabel/android-persist'/>
+      <target dev='vdd' bus='virtio'/>
+      <blockio logical_block_size='512' physical_block_size='512'/>
+    </disk>
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <source>
         <address domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
@@ -146,11 +152,16 @@ if [ ! -b /dev/disk/by-partlabel/android-metadata ]; then
   echo "Android TV metadata partition is missing; migrate userdata and metadata together" >&2
   exit 1
 fi
+if [ ! -b /dev/disk/by-partlabel/android-persist ]; then
+  echo "Android TV PERSIST partition is missing; install or migrate all state disks" >&2
+  exit 1
+fi
 
 userdata_parent=$(lsblk -ndpo PKNAME /dev/disk/by-partlabel/android-userdata)
 metadata_parent=$(lsblk -ndpo PKNAME /dev/disk/by-partlabel/android-metadata)
-if [ -z "$userdata_parent" ] || [ "$userdata_parent" != "$metadata_parent" ]; then
-  echo "Android TV userdata and metadata must belong to the same installation disk" >&2
+persist_parent=$(lsblk -ndpo PKNAME /dev/disk/by-partlabel/android-persist)
+if [ -z "$userdata_parent" ] || [ "$userdata_parent" != "$metadata_parent" ] || [ "$userdata_parent" != "$persist_parent" ]; then
+  echo "Android TV userdata, metadata and persist must belong to the same installation disk" >&2
   exit 1
 fi
 

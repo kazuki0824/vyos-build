@@ -21,18 +21,20 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
 text = replace_once(
     text,
     '    available_size: int = (target_size - CONST_RESERVED_SPACE) // 1024\n',
-    """    metadata_image = Path('/usr/local/share/android-tv/metadata-empty.img')
-    metadata_size = metadata_image.stat().st_size
-    if metadata_size != 34 * 1024**2:
-        raise RuntimeError('Unexpected Android metadata disk image size')
+    """    # The installer, not the Android build, owns blank GPT initialization.
+    metadata_size = 34 * 1024**2
+    persist_image = Path('/usr/local/share/android-tv/persist.img')
+    persist_size = persist_image.stat().st_size
+    if persist_size != 16 * 1024**2:
+        raise RuntimeError('Unexpected Android PERSIST FAT32 image size')
     available_size: int = (
         target_size - CONST_RESERVED_SPACE - 16 * 1024**3
-        - metadata_size - 1024**2
+        - metadata_size - persist_size - 2 * 1024**2
     ) // 1024
     if available_size < CONST_MIN_ROOT_SIZE // 1024:
         raise RuntimeError(
-            'Not enough disk space for the VyOS root partition and '
-            'Android userdata and metadata partitions'
+            'Not enough disk space for VyOS root, Android userdata, '
+            'Android metadata, and Android persist partitions'
         )
 """,
     'root size reservation',
@@ -48,20 +50,46 @@ text = replace_once(
     """    disk_details: disk.DiskDetails = disk.parttable_create(target_disk,
                                                            rootfs_size)
 
-    # Allocate the small metadata disk first, then give userdata the remainder.
+    # Reserve metadata and persist BEFORE userdata consumes the remainder.
+    # Host GPT #5/#6 are raw VirtIO disks in Android, not guest partitions.
     cmdl(['sgdisk', f'-n5:0:+{metadata_size // 1024}K', '-t5:8300',
-          '-c5:android-metadata', '-n4:0:0', '-t4:8300',
-          '-c4:android-userdata', target_disk])
+          '-c5:android-metadata',
+          f'-n6:0:+{persist_size // 1024}K', '-t6:8300',
+          '-c6:android-persist',
+          '-n4:0:0', '-t4:8300', '-c4:android-userdata', target_disk])
     cmdl(['partx', '-u', target_disk])
     cmdl(['udevadm', 'settle'])
+
+    partitions = disk.partition_list(target_disk)
     metadata_partition = next(
-        path for path in disk.partition_list(target_disk) if path.endswith('5')
+        path for path in partitions if path.endswith('5')
+    )
+    persist_partition = next(
+        path for path in partitions if path.endswith('6')
     )
     if not Path(metadata_partition).is_block_device():
-        raise RuntimeError('Android metadata partition is not a block device')
-    # The template contains a 512-byte-sector GPT and a blank 32 MiB partition.
-    # Copy only during destructive full installation; image upgrades retain it.
-    cmdl(['dd', f'if={metadata_image}', f'of={metadata_partition}',
+        raise RuntimeError('Android metadata is not a block device')
+    if not Path(persist_partition).is_block_device():
+        raise RuntimeError('Android persist is not a block device')
+
+    # The metadata guest disk must contain an inner GPT with vdc1 as the
+    # metadata partition. Create it at installation time rather than
+    # shipping a redundant empty disk image in every ISO.
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix='android-metadata-') as tmp:
+        metadata_disk = Path(tmp) / 'metadata.raw'
+        with metadata_disk.open('wb') as image:
+            image.truncate(metadata_size)
+        cmdl(['sgdisk', '--clear', '--new=1:2048:+32M',
+              '--typecode=1:8300', '--change-name=1:metadata',
+              str(metadata_disk)])
+        cmdl(['dd', f'if={metadata_disk}', f'of={metadata_partition}',
+              'bs=1M', 'conv=fsync,notrunc'])
+
+    # This full-disk FAT32 image includes GRUB's initialized A/B variables.
+    # Only a destructive new installation may initialize these partitions;
+    # ordinary VyOS system-image upgrades must not execute this branch.
+    cmdl(['dd', f'if={persist_image}', f'of={persist_partition}',
           'bs=1M', 'conv=fsync,notrunc'])
 
     return disk_details
